@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Advanced Posts</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    transition: background 0.3s, color 0.3s;
+  }
+  :root {
+    --bg: #ffffff;
+    --text: #000000;
+    --post-bg: #f1f1f1;
+  }
+  .dark {
+    --bg: #181818;
+    --text: #ffffff;
+    --post-bg: #242424;
+  }
+  .container { max-width: 700px; margin: auto; padding: 20px; }
+  .post { background: var(--post-bg); padding: 15px; margin-bottom: 15px; border-radius: 10px; }
+  .likes-comments { display: flex; gap: 15px; align-items: center; margin-top: 10px; }
+  .comment-icon { font-size: 18px; cursor: pointer; position: relative; }
+  .comment-count {
+    background: red; color: white; border-radius: 50%;
+    padding: 4px 8px; font-size: 12px; position: absolute;
+    top: -8px; right: -12px;
+  }
+  button { cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <button id="themeToggle">Toggle Theme</button>
+  <div id="postForm" style="display:none;">
+    <h3>Create Post</h3>
+    <textarea id="postContent" placeholder="Write something..."></textarea><br>
+    <button id="submitPost">Post</button>
+  </div>
+  <div id="posts"></div>
+  <div id="postDetail" style="display:none;"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, getDocs, getDoc, doc, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCBvuEMs5sT3L_MO_G_cCXjDKaw0vHX5y0",
+  authDomain: "myposts-39df7.firebaseapp.com",
+  projectId: "myposts-39df7",
+  storageBucket: "myposts-39df7.firebasestorage.app",
+  messagingSenderId: "722359118709",
+  appId: "1:722359118709:web:ef65041f6d6aa0f52b013c",
+  measurementId: "G-R9DEG85RTW"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+const verifiedUIDs = ["YOUR_VERIFIED_UID"]; // only you
+
+// Theme handling
+const body = document.body;
+if(localStorage.getItem("theme") === "dark") body.classList.add("dark");
+document.getElementById("themeToggle").onclick = () => {
+  body.classList.toggle("dark");
+  localStorage.setItem("theme", body.classList.contains("dark") ? "dark" : "light");
+};
+
+// Check Auth and show form
+onAuthStateChanged(auth, user => {
+  if(user && verifiedUIDs.includes(user.uid)){
+    document.getElementById("postForm").style.display = "block";
+  }
+});
+
+// Post submission
+document.getElementById("submitPost").onclick = async () => {
+  const content = document.getElementById("postContent").value.trim();
+  if(content){
+    await addDoc(collection(db, "posts"), {
+      content,
+      createdAt: serverTimestamp(),
+      authorId: auth.currentUser.uid
+    });
+    location.reload();
+  }
+};
+
+// Load posts or single post
+const postId = new URLSearchParams(location.search).get("postid");
+if(postId){
+  loadSinglePost(postId);
+} else {
+  loadPosts();
+}
+
+async function loadPosts(){
+  const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+  const snap = await getDocs(q);
+  const postsDiv = document.getElementById("posts");
+  snap.forEach(docSnap => {
+    const post = docSnap.data();
+    postsDiv.innerHTML += `
+      <div class="post">
+        ${post.content}
+        <div class="likes-comments">
+          <span class="comment-icon" onclick="location.href='?postid=${docSnap.id}'">💬<span class="comment-count">0</span></span>
+        </div>
+      </div>
+    `;
+  });
+}
+
+async function loadSinglePost(id){
+  document.getElementById("posts").style.display = "none";
+  const postSnap = await getDoc(doc(db, "posts", id));
+  if(postSnap.exists()){
+    document.getElementById("postDetail").style.display = "block";
+    document.getElementById("postDetail").innerHTML = `
+      <div class="post">
+        ${postSnap.data().content}
+      </div>
+      <h4>Comments</h4>
+      <div id="comments"></div>
+    `;
+  }
+}
+</script>
+</body>
+</html>
