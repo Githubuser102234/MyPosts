@@ -1,54 +1,104 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>Advanced Posts</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Advanced Posts (Firestore)</title>
 <style>
-  body {
-    font-family: Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    transition: background 0.3s, color 0.3s;
+  :root{
+    --bg:#ffffff; --card:#f6f6f6; --text:#111;
+    --muted:#666; --accent:#0366d6;
   }
-  :root {
-    --bg: #ffffff;
-    --text: #000000;
-    --post-bg: #f1f1f1;
+  .dark{
+    --bg:#0f1113; --card:#151718; --text:#e6eef6;
+    --muted:#aab3c0; --accent:#5393ff;
   }
-  .dark {
-    --bg: #181818;
-    --text: #ffffff;
-    --post-bg: #242424;
-  }
-  .container { max-width: 700px; margin: auto; padding: 20px; }
-  .post { background: var(--post-bg); padding: 15px; margin-bottom: 15px; border-radius: 10px; }
-  .likes-comments { display: flex; gap: 15px; align-items: center; margin-top: 10px; }
-  .comment-icon { font-size: 18px; cursor: pointer; position: relative; }
-  .comment-count {
-    background: red; color: white; border-radius: 50%;
-    padding: 4px 8px; font-size: 12px; position: absolute;
-    top: -8px; right: -12px;
-  }
-  button { cursor: pointer; }
+  body{ background:var(--bg); color:var(--text); font-family:Inter,system-ui,Arial; margin:0; padding:18px;}
+  .wrap{max-width:900px;margin:0 auto;}
+  header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px;}
+  .brand{font-weight:700;font-size:1.05rem;}
+  .controls{display:flex; gap:8px; align-items:center;}
+  button{border:0;padding:8px 10px;border-radius:8px;background:var(--card);cursor:pointer;}
+  .authBox{display:flex;gap:8px;align-items:center;}
+  input, textarea{padding:8px;border-radius:8px;border:1px solid #ccc;background:transparent;color:var(--text)}
+  textarea{min-height:80px;resize:vertical;width:100%;}
+  .card{background:var(--card);padding:12px;border-radius:12px;margin-bottom:12px;}
+  .postMeta{display:flex;justify-content:space-between;align-items:center;font-size:0.9rem;color:var(--muted)}
+  .actions{display:flex;gap:12px;align-items:center;margin-top:8px}
+  .commentIcon{position:relative;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:999px;background:transparent;border:1px solid rgba(0,0,0,0.08);cursor:pointer}
+  .commentCount{position:absolute;right:-8px;top:-8px;min-width:22px;height:22px;border-radius:50%;background:var(--accent);color:white;display:inline-flex;align-items:center;justify-content:center;font-size:12px;padding:0 6px;box-shadow:0 2px 6px rgba(0,0,0,0.15);}
+  .likeBtn.active{font-weight:700;color:var(--accent)}
+  .commentList{margin-top:10px;padding-left:8px}
+  .commentItem{padding:8px;border-radius:8px;margin-bottom:8px;background:rgba(0,0,0,0.02)}
+  .replyBox{margin-left:16px;margin-top:8px}
+  .small{font-size:0.85rem;color:var(--muted)}
+  .hidden{display:none}
+  .postLink{color:var(--accent);text-decoration:none}
+  .center{text-align:center;color:var(--muted);padding:20px}
 </style>
 </head>
 <body>
+<div class="wrap">
+  <header>
+    <div class="brand">My Posts</div>
+    <div class="controls">
+      <button id="themeToggle">Toggle theme</button>
+      <div id="authControls" class="authBox">
+        <!-- Sign up / login / user info added by JS -->
+      </div>
+    </div>
+  </header>
 
-<div class="container">
-  <button id="themeToggle">Toggle Theme</button>
-  <div id="postForm" style="display:none;">
-    <h3>Create Post</h3>
-    <textarea id="postContent" placeholder="Write something..."></textarea><br>
-    <button id="submitPost">Post</button>
+  <!-- Post creation (only shown to verified UIDs) -->
+  <div id="createPostCard" class="card hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <strong>Create a post</strong>
+      <span class="small">Only verified users can post</span>
+    </div>
+    <div style="margin-top:8px">
+      <textarea id="postText" placeholder="Share something..."></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
+        <button id="submitPostBtn">Post</button>
+      </div>
+    </div>
   </div>
-  <div id="posts"></div>
-  <div id="postDetail" style="display:none;"></div>
+
+  <!-- Posts listing -->
+  <div id="feed"></div>
+
+  <!-- Post detail view -->
+  <div id="postDetailWrap" class="hidden">
+    <button id="backToFeed">← Back</button>
+    <div id="postDetail"></div>
+    <hr>
+    <div id="commentComposer" class="card hidden">
+      <div><strong>Write a comment</strong></div>
+      <textarea id="commentText" placeholder="Write a comment..."></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:6px">
+        <button id="submitComment">Comment</button>
+      </div>
+    </div>
+
+    <div id="commentsContainer"></div>
+  </div>
 </div>
 
 <script type="module">
+/* ============================
+  Firebase Initialization
+   - Uses user's firebase config from their message
+   - Replace VERIFIED_UID with actual uid(s)
+   (You must set authenticated user uid(s) in verifiedUIDs)
+   ============================ */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, getDocs, getDoc, doc, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+import {
+  getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  signOut, onAuthStateChanged, updateProfile
+} from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import {
+  getFirestore, collection, doc, addDoc, setDoc, getDoc, getDocs,
+  onSnapshot, serverTimestamp, query, orderBy, deleteDoc
+} from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCBvuEMs5sT3L_MO_G_cCXjDKaw0vHX5y0",
@@ -61,78 +111,428 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
 const auth = getAuth(app);
+const db = getFirestore(app);
 
-const verifiedUIDs = ["YOUR_VERIFIED_UID"]; // only you
+/* === CONFIG: set your verified UID(s) here ===
+   Replace "VERIFIED_UID" with the actual UID(s) who can create posts.
+   e.g. const verifiedUIDs = ['UID1','UID2'];
+*/
+const verifiedUIDs = ["VERIFIED_UID"];
 
-// Theme handling
-const body = document.body;
-if(localStorage.getItem("theme") === "dark") body.classList.add("dark");
-document.getElementById("themeToggle").onclick = () => {
-  body.classList.toggle("dark");
-  localStorage.setItem("theme", body.classList.contains("dark") ? "dark" : "light");
-};
+/* ========================
+   UI refs
+   ======================== */
+const createPostCard = document.getElementById('createPostCard');
+const submitPostBtn = document.getElementById('submitPostBtn');
+const postText = document.getElementById('postText');
+const feed = document.getElementById('feed');
+const authControls = document.getElementById('authControls');
+const themeToggle = document.getElementById('themeToggle');
 
-// Check Auth and show form
-onAuthStateChanged(auth, user => {
-  if(user && verifiedUIDs.includes(user.uid)){
-    document.getElementById("postForm").style.display = "block";
-  }
+const postDetailWrap = document.getElementById('postDetailWrap');
+const postDetail = document.getElementById('postDetail');
+const backToFeed = document.getElementById('backToFeed');
+const commentComposer = document.getElementById('commentComposer');
+const commentText = document.getElementById('commentText');
+const submitComment = document.getElementById('submitComment');
+const commentsContainer = document.getElementById('commentsContainer');
+
+/* ========================
+   Theme handling
+   ======================== */
+if(localStorage.getItem('theme') === 'dark') document.body.classList.add('dark');
+themeToggle.addEventListener('click', () => {
+  document.body.classList.toggle('dark');
+  localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');
 });
 
-// Post submission
-document.getElementById("submitPost").onclick = async () => {
-  const content = document.getElementById("postContent").value.trim();
-  if(content){
-    await addDoc(collection(db, "posts"), {
-      content,
-      createdAt: serverTimestamp(),
-      authorId: auth.currentUser.uid
-    });
-    location.reload();
+/* ========================
+   Authentication UI
+   ======================== */
+function renderAuth(user){
+  authControls.innerHTML = '';
+  if(user){
+    const span = document.createElement('span');
+    span.textContent = user.displayName ? user.displayName : (user.email || user.uid);
+    const outBtn = document.createElement('button');
+    outBtn.textContent = 'Sign out';
+    outBtn.onclick = () => signOut(auth);
+    authControls.appendChild(span);
+    authControls.appendChild(outBtn);
+  } else {
+    // Signup/Login form
+    const emailI = document.createElement('input'); emailI.placeholder='Email'; emailI.id='authEmail';
+    const passI = document.createElement('input'); passI.placeholder='Password'; passI.type='password'; passI.id='authPass';
+    const nameI = document.createElement('input'); nameI.placeholder='Display name (optional)'; nameI.id='authName';
+    const signup = document.createElement('button'); signup.textContent='Sign up';
+    const login = document.createElement('button'); login.textContent='Log in';
+    signup.onclick = async () => {
+      try{
+        const email = emailI.value; const pass = passI.value; const name = nameI.value;
+        const cred = await createUserWithEmailAndPassword(auth, email, pass);
+        if(name) await updateProfile(cred.user, { displayName: name });
+        emailI.value=''; passI.value=''; nameI.value='';
+      }catch(e){ alert(e.message); }
+    };
+    login.onclick = async () => {
+      try{
+        await signInWithEmailAndPassword(auth, emailI.value, passI.value);
+        emailI.value=''; passI.value='';
+      }catch(e){ alert(e.message); }
+    };
+    authControls.appendChild(nameI);
+    authControls.appendChild(emailI);
+    authControls.appendChild(passI);
+    authControls.appendChild(signup);
+    authControls.appendChild(login);
   }
-};
-
-// Load posts or single post
-const postId = new URLSearchParams(location.search).get("postid");
-if(postId){
-  loadSinglePost(postId);
-} else {
-  loadPosts();
 }
 
-async function loadPosts(){
-  const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
-  const snap = await getDocs(q);
-  const postsDiv = document.getElementById("posts");
-  snap.forEach(docSnap => {
-    const post = docSnap.data();
-    postsDiv.innerHTML += `
-      <div class="post">
-        ${post.content}
-        <div class="likes-comments">
-          <span class="comment-icon" onclick="location.href='?postid=${docSnap.id}'">💬<span class="comment-count">0</span></span>
+/* ========================
+   Auth listener
+   ======================== */
+let currentUser = null;
+onAuthStateChanged(auth, user => {
+  currentUser = user;
+  renderAuth(user);
+  // show/hide createPost if user is verified
+  if(user && verifiedUIDs.includes(user.uid)){
+    createPostCard.classList.remove('hidden');
+  } else {
+    createPostCard.classList.add('hidden');
+  }
+
+  // show/hide comment composer on detail view
+  if(user) commentComposer.classList.remove('hidden');
+  else commentComposer.classList.add('hidden');
+});
+
+/* ========================
+   Utilities: pretty time
+   ======================== */
+function timeAgo(ts){
+  if(!ts) return '';
+  const now = Date.now();
+  const diff = Math.floor((now - ts)/1000);
+  if(diff < 5) return 'just now';
+  if(diff < 60) return `${diff} second${diff!==1?'s':''} ago`;
+  if(diff < 3600){
+    const m = Math.floor(diff/60);
+    return `${m} minute${m!==1?'s':''} ago`;
+  }
+  if(diff < 86400){
+    const h = Math.floor(diff/3600);
+    return `${h} hour${h!==1?'s':''} ago`;
+  }
+  const days = Math.floor(diff/86400);
+  return `${days} day${days!==1?'s':''} ago`;
+}
+function fullTimestamp(ts){
+  if(!ts) return '';
+  const d = new Date(ts);
+  return d.toLocaleString();
+}
+
+/* ========================
+   Real-time feed: posts list
+   ======================== */
+let postsUnsub = null;
+function startFeedListener(){
+  const postsCol = collection(db, 'posts');
+  const q = query(postsCol, orderBy('createdAt', 'desc'));
+  postsUnsub = onSnapshot(q, snapshot => {
+    feed.innerHTML = '';
+    if(snapshot.empty){
+      feed.innerHTML = '<div class="center">No posts yet.</div>';
+      return;
+    }
+    snapshot.forEach(docSnap => {
+      const id = docSnap.id;
+      const data = docSnap.data();
+      renderPostCard(id, data);
+    });
+  }, err => console.error(err));
+}
+startFeedListener();
+
+/* Render one post card in feed */
+async function renderPostCard(postId, data){
+  // compute counts by reading subcollections counts (cheap approach for small scale)
+  const [commentsSnap, likesSnap] = await Promise.all([
+    getDocs(collection(db, 'posts', postId, 'comments')),
+    getDocs(collection(db, 'posts', postId, 'likes'))
+  ]);
+  const commentCount = commentsSnap.size;
+  const likeCount = likesSnap.size;
+
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.innerHTML = `
+    <div class="postMeta">
+      <div><strong>${data.authorName || 'Anonymous'}</strong> <span class="small">• ${fullTimestamp(data.createdAt?.toMillis?.() ?? (data.createdAt ? data.createdAt : ''))}</span></div>
+      <div class="small">${timeAgo((data.createdAt && data.createdAt.toMillis) ? data.createdAt.toMillis() : Date.now())}</div>
+    </div>
+    <div style="margin-top:10px">${escapeHtml(data.content)}</div>
+    <div class="actions">
+      <button class="likeBtn" data-id="${postId}">👍 <span class="likeCount">${likeCount}</span></button>
+      <div class="commentIcon" title="View post" role="button" data-id="${postId}">
+        💬
+        <span class="commentCount">${commentCount}</span>
+      </div>
+      <a class="postLink" href="?postid=${postId}">Open</a>
+    </div>
+  `;
+  // like button behaviour
+  const likeBtn = el.querySelector('.likeBtn');
+  likeBtn.onclick = async () => {
+    if(!currentUser){ alert('Sign in to like'); return; }
+    const likeRef = doc(db, 'posts', postId, 'likes', currentUser.uid);
+    const likeDoc = await getDoc(likeRef);
+    if(likeDoc.exists()){
+      await deleteDoc(likeRef);
+    } else {
+      await setDoc(likeRef, { userId: currentUser.uid, createdAt: serverTimestamp() });
+    }
+  };
+
+  // go to post detail when comment icon clicked
+  el.querySelector('.commentIcon').onclick = () => {
+    history.pushState(null, '', '?postid=' + postId);
+    openPostDetail(postId);
+  };
+
+  feed.appendChild(el);
+}
+
+/* ========================
+   Create post
+   ======================== */
+submitPostBtn.addEventListener('click', async () => {
+  if(!currentUser) { alert('You must be signed in'); return; }
+  if(!verifiedUIDs.includes(currentUser.uid)) { alert('You are not verified to post'); return; }
+  const content = postText.value.trim();
+  if(!content) return;
+  try{
+    await addDoc(collection(db, 'posts'), {
+      content,
+      authorId: currentUser.uid,
+      authorName: currentUser.displayName || currentUser.email || null,
+      createdAt: serverTimestamp()
+    });
+    postText.value = '';
+  }catch(e){ alert(e.message); }
+});
+
+/* ========================
+   Post Detail (live comments, likes, replies)
+   ======================== */
+let commentsUnsub = null;
+async function openPostDetail(postId){
+  // hide feed, show detail
+  document.getElementById('feed').classList.add('hidden');
+  postDetailWrap.classList.remove('hidden');
+  // load single post doc
+  const pRef = doc(db, 'posts', postId);
+  const pSnap = await getDoc(pRef);
+  if(!pSnap.exists()){ postDetail.innerHTML = '<div class="card">Post not found</div>'; return; }
+  const p = pSnap.data();
+  postDetail.innerHTML = `
+    <div class="card">
+      <div class="postMeta">
+        <div><strong>${p.authorName || 'Anonymous'}</strong> <span class="small">• ${fullTimestamp(p.createdAt?.toMillis?.() ?? '')}</span></div>
+        <div class="small">${timeAgo((p.createdAt && p.createdAt.toMillis) ? p.createdAt.toMillis() : Date.now())}</div>
+      </div>
+      <div style="margin-top:10px">${escapeHtml(p.content)}</div>
+      <div class="actions" style="margin-top:12px">
+        <button id="postLikeBtn">👍 <span id="postLikeCount">...</span></button>
+        <div class="commentIcon" title="Comments">
+          💬 <span class="commentCount" id="postCommentCount">...</span>
         </div>
       </div>
-    `;
+    </div>
+  `;
+
+  // connect likes & comments counts with real-time
+  const likesCol = collection(db, 'posts', postId, 'likes');
+  const commentsCol = collection(db, 'posts', postId, 'comments');
+
+  // likes listener
+  onSnapshot(likesCol, snap => {
+    document.getElementById('postLikeCount').textContent = snap.size;
+    // toggle UI for current user's like
+    if(currentUser){
+      const myLike = snap.docs.find(d => d.id === currentUser.uid);
+      const btn = document.getElementById('postLikeBtn');
+      btn.classList.toggle('active', !!myLike);
+    }
   });
+
+  // comments count listener
+  const unsubCommentsCount = onSnapshot(commentsCol, snap => {
+    document.getElementById('postCommentCount').textContent = snap.size;
+  });
+
+  // post like/unlike behaviour
+  document.getElementById('postLikeBtn').onclick = async () => {
+    if(!currentUser){ alert('Sign in to like'); return; }
+    const myLikeRef = doc(db, 'posts', postId, 'likes', currentUser.uid);
+    const likeDoc = await getDoc(myLikeRef);
+    if(likeDoc.exists()){
+      await deleteDoc(myLikeRef);
+    } else {
+      await setDoc(myLikeRef, { userId: currentUser.uid, createdAt: serverTimestamp() });
+    }
+  };
+
+  // show/hide comment composer
+  commentComposer.classList.toggle('hidden', !currentUser);
+
+  // listen to comments (order by createdAt)
+  if(commentsUnsub) commentsUnsub();
+  const q = query(commentsCol, orderBy('createdAt', 'asc'));
+  commentsUnsub = onSnapshot(q, async snapshot => {
+    commentsContainer.innerHTML = '';
+    if(snapshot.empty) commentsContainer.innerHTML = '<div class="center">No comments yet.</div>';
+    for(const cDoc of snapshot.docs){
+      const c = cDoc.data();
+      const commentEl = document.createElement('div');
+      commentEl.className = 'commentItem';
+      // count replies and likes
+      const [repliesSnap, likesSnap] = await Promise.all([
+        getDocs(collection(db, 'posts', postId, 'comments', cDoc.id, 'replies')),
+        getDocs(collection(db, 'posts', postId, 'comments', cDoc.id, 'likes'))
+      ]);
+      const replyCount = repliesSnap.size;
+      const likeCount = likesSnap.size;
+
+      commentEl.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><strong>${c.userName || 'User'}</strong> <span class="small">• ${fullTimestamp(c.createdAt?.toMillis?.() ?? '')}</span></div>
+          <div class="small">${timeAgo((c.createdAt && c.createdAt.toMillis) ? c.createdAt.toMillis() : Date.now())}</div>
+        </div>
+        <div style="margin-top:8px">${escapeHtml(c.text)}</div>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+          <button class="commentLikeBtn" data-cid="${cDoc.id}">👍 <span class="small likeCnt">${likeCount}</span></button>
+          <button class="replyToggleBtn" data-cid="${cDoc.id}">Reply (${replyCount})</button>
+        </div>
+        <div class="replyBox hidden" id="replies_${cDoc.id}"></div>
+      `;
+      // like comment click
+      commentEl.querySelector('.commentLikeBtn').onclick = async (e) => {
+        if(!currentUser){ alert('Sign in to like'); return; }
+        const likeRef = doc(db, 'posts', postId, 'comments', cDoc.id, 'likes', currentUser.uid);
+        const lDoc = await getDoc(likeRef);
+        if(lDoc.exists()) await deleteDoc(likeRef); else await setDoc(likeRef, { userId: currentUser.uid, createdAt: serverTimestamp() });
+      };
+      // reply toggle
+      commentEl.querySelector('.replyToggleBtn').onclick = () => {
+        const rbox = commentEl.querySelector(`#replies_${cDoc.id}`);
+        if(rbox.classList.contains('hidden')){
+          rbox.classList.remove('hidden');
+          loadRepliesUI(postId, cDoc.id, rbox);
+        } else {
+          rbox.classList.add('hidden');
+          rbox.innerHTML = '';
+        }
+      };
+
+      commentsContainer.appendChild(commentEl);
+    }
+  });
+
+  // when leaving detail, cleanup listeners
+  backToFeed.onclick = () => {
+    history.pushState(null,'','/');
+    postDetailWrap.classList.add('hidden');
+    document.getElementById('feed').classList.remove('hidden');
+    if(commentsUnsub) commentsUnsub();
+  };
 }
 
-async function loadSinglePost(id){
-  document.getElementById("posts").style.display = "none";
-  const postSnap = await getDoc(doc(db, "posts", id));
-  if(postSnap.exists()){
-    document.getElementById("postDetail").style.display = "block";
-    document.getElementById("postDetail").innerHTML = `
-      <div class="post">
-        ${postSnap.data().content}
-      </div>
-      <h4>Comments</h4>
-      <div id="comments"></div>
-    `;
-  }
+/* Load replies UI for a specific comment (shows replies + composer) */
+function loadRepliesUI(postId, commentId, container){
+  container.innerHTML = '';
+  const composer = document.createElement('div');
+  composer.className = 'card';
+  composer.style.marginBottom = '8px';
+  composer.innerHTML = `
+    <div class="small"><strong>Replies</strong></div>
+    <textarea id="replyText_${commentId}" placeholder="Write a reply..." style="width:100%;margin-top:8px"></textarea>
+    <div style="display:flex;justify-content:flex-end;margin-top:6px"><button id="replyBtn_${commentId}">Reply</button></div>
+    <div id="repliesList_${commentId}" class="commentList" style="margin-top:8px"></div>
+  `;
+  container.appendChild(composer);
+
+  // fetch and listen to replies
+  const repliesCol = collection(db, 'posts', postId, 'comments', commentId, 'replies');
+  const q = query(repliesCol, orderBy('createdAt', 'asc'));
+  const unsub = onSnapshot(q, snapshot => {
+    const list = composer.querySelector(`#repliesList_${commentId}`);
+    list.innerHTML = '';
+    if(snapshot.empty) list.innerHTML = '<div class="small">No replies yet</div>';
+    snapshot.forEach(rDoc => {
+      const r = rDoc.data();
+      const item = document.createElement('div');
+      item.className = 'commentItem';
+      item.innerHTML = `<div><strong>${r.userName || 'User'}</strong> <span class="small">• ${fullTimestamp(r.createdAt?.toMillis?.() ?? '')}</span></div>
+                        <div style="margin-top:6px">${escapeHtml(r.text)}</div>`;
+      list.appendChild(item);
+    });
+  });
+
+  // reply button
+  composer.querySelector(`#replyBtn_${commentId}`).onclick = async () => {
+    if(!currentUser){ alert('Sign in to reply'); return; }
+    const text = document.getElementById(`replyText_${commentId}`).value.trim();
+    if(!text) return;
+    await addDoc(collection(db,'posts',postId,'comments',commentId,'replies'), {
+      text, userId: currentUser.uid, userName: currentUser.displayName || currentUser.email || null, createdAt: serverTimestamp()
+    });
+    document.getElementById(`replyText_${commentId}`).value = '';
+  };
+
+  // when replies UI removed, unsubscribe automatically when DOM removed (not perfect but OK for small scale)
 }
+
+/* Submit a top-level comment */
+submitComment.onclick = async () => {
+  if(!currentUser){ alert('Sign in to comment'); return; }
+  const text = commentText.value.trim();
+  if(!text) return;
+  const postId = new URLSearchParams(location.search).get('postid');
+  if(!postId) return;
+  await addDoc(collection(db, 'posts', postId, 'comments'), {
+    text, userId: currentUser.uid, userName: currentUser.displayName || currentUser.email || null, createdAt: serverTimestamp()
+  });
+  commentText.value = '';
+};
+
+/* ========================
+   Helper: escapeHtml to avoid basic injection
+   ======================== */
+function escapeHtml(txt){
+  if(!txt) return '';
+  return txt.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+}
+
+/* ========================
+   Utility: if page loaded with ?postid, open it
+   ======================== */
+const initialPostId = new URLSearchParams(location.search).get('postid');
+if(initialPostId) openPostDetail(initialPostId);
+
+/* ========================
+   Clean up on page unload (optional)
+   ======================== */
+window.addEventListener('popstate', () => {
+  const pid = new URLSearchParams(location.search).get('postid');
+  if(pid) openPostDetail(pid);
+  else {
+    postDetailWrap.classList.add('hidden');
+    document.getElementById('feed').classList.remove('hidden');
+  }
+});
 </script>
 </body>
 </html>
